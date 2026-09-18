@@ -23,7 +23,7 @@ export async function POST(
   const admin = createSupabaseAdmin();
   const { data: paper, error } = await admin
     .from("papers")
-    .select("id,title,subject,encrypted_content,iv,watermark_id")
+    .select("id, title, subject, encrypted_content, iv, auth_tag, watermark_id")
     .eq("id", id).single();
 
   if (error || !paper) return NextResponse.json({ error: "Paper not found." }, { status: 404 });
