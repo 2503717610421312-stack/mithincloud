@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseServer } from "../../../../../lib/supabase-server";
 import { createSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { decryptPaper } from "../../../../../lib/crypto";
+import { hasVerifiedMfa, mfaRequiredResponse } from "../../../../../lib/api-security";
+import { createWatermarkId } from "../../../../../lib/watermark";
 
 export async function POST(
   request: Request,
@@ -12,6 +14,7 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasVerifiedMfa(supabase))) return mfaRequiredResponse();
 
   const { data: profile } = await supabase
     .from("profiles").select("role").eq("id", user.id).single();
@@ -30,23 +33,26 @@ export async function POST(
 
   try {
     const content = decryptPaper(paper.encrypted_content, paper.iv, paper.auth_tag || "");
+    const watermarkId = createWatermarkId();
 
     const forwarded = request.headers.get("x-forwarded-for");
     const userAgent = request.headers.get("user-agent");
 
-    await admin.from("audit_logs").insert({
+    const { error: auditError } = await admin.from("audit_logs").insert({
       user_id: user.id,
       paper_id: paper.id,
-      action: "PAPER_PRINTED",
+      action: "PAPER_PRINT_AUTHORIZED",
+      copy_watermark_id: watermarkId,
       ip_address: forwarded?.split(",")[0]?.trim() || null,
       user_agent: userAgent || null
     });
+    if (auditError) throw auditError;
 
     return NextResponse.json({
       title: paper.title,
       subject: paper.subject,
       content,
-      watermark_id: paper.watermark_id
+      watermark_id: watermarkId
     });
   } catch {
     return NextResponse.json({ error: "Decryption failed." }, { status: 500 });

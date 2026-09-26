@@ -39,6 +39,9 @@ create table if not exists public.audit_logs (
   created_at timestamptz not null default now()
 );
 
+alter table public.audit_logs
+  add column if not exists copy_watermark_id text;
+
 alter table public.profiles enable row level security;
 alter table public.papers enable row level security;
 alter table public.audit_logs enable row level security;
@@ -83,22 +86,20 @@ on public.profiles for select
 to authenticated
 using (id = auth.uid() or public.current_user_role() = 'admin');
 
--- Paper access.
+-- Paper rows are accessed only through server routes. Browser clients must not
+-- be able to retrieve ciphertext and attempt to bypass application controls.
 drop policy if exists "papers authorized read" on public.papers;
 create policy "papers authorized read"
 on public.papers for select
 to authenticated
-using (
-  public.current_user_role() in ('admin','question_setter','exam_officer','exam_centre')
-);
+using (false);
 
 drop policy if exists "papers setters insert" on public.papers;
 create policy "papers setters insert"
 on public.papers for insert
 to authenticated
 with check (
-  public.current_user_role() in ('admin','question_setter','exam_officer')
-  and created_by = auth.uid()
+  false
 );
 
 -- Audit logs: users may insert their own audit record; admins/officers can read.
@@ -106,7 +107,7 @@ drop policy if exists "audit insert own" on public.audit_logs;
 create policy "audit insert own"
 on public.audit_logs for insert
 to authenticated
-with check (user_id = auth.uid());
+with check (false);
 
 drop policy if exists "audit authorized read" on public.audit_logs;
 create policy "audit authorized read"

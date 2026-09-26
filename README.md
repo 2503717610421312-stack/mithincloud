@@ -1,224 +1,93 @@
-# Secure Question Paper Management Portal
+# QP/Sec: Secure Question Paper Portal
 
-A MicroProject implementation for protecting examination question papers against unauthorized access, copying and distribution.
+An academic demonstration of a controlled examination-paper lifecycle: authenticated authoring, server-side encryption, MFA-gated role access, per-copy trace identifiers, controlled print authorization, and audit review.
 
-## Main security flow
+> This is a demonstration, not a production examination-security platform. A web app cannot prevent photography, screenshots, copying after decryption, compromised endpoints, or access to a local printer. HSM/KMS key custody, managed print, DLP, network controls, CCTV and physical transport procedures require institution-managed infrastructure and are not simulated here.
 
-Question Setter → MFA/Login → Secure Portal → Encryption + Watermark Metadata → Supabase/PostgreSQL → Authorized Exam Centre → Secure Print → Audit Logs → Leakage Investigation
+## Workflow
 
-## Features implemented
+Question setter → MFA + role check → AES-256-GCM encryption → Supabase storage → authorized view/print → unique copy watermark → audit event → investigation
 
-- Supabase email/password authentication.
-- Role-based access: `admin`, `question_setter`, `exam_officer`, `exam_centre`.
-- PostgreSQL Row Level Security (RLS).
-- Server-side AES-256-GCM encryption for question-paper content.
-- Unique watermark/copy identifier for every stored paper.
-- Audit logging for create, view/decrypt and print actions.
-- Secure server API routes.
-- Exam-centre print action with a visible watermark footer.
-- Dashboard showing papers and recent audit events.
-- Vercel-ready Next.js deployment.
+| Control | Demonstration |
+| --- | --- |
+| Authentication | Supabase email/password and TOTP authenticator MFA |
+| RBAC | `admin`, `question_setter`, `exam_officer`, `exam_centre` roles enforced in API routes |
+| Encryption | Question content encrypted on the server with AES-256-GCM; keys are never sent to the browser |
+| Storage | Supabase Postgres stores ciphertext; browser-side RLS access to paper and audit rows is denied |
+| Copy traceability | Each authorized view and print authorization receives a unique copy ID tied to the user and event |
+| Audit | Creation, view, and print authorization events are recorded with time and available request metadata |
+| Incident response | Admins/exam officers can review events; revoke a user's Supabase account/session and investigate the matching copy ID |
 
-> This is an academic prototype. Real national/state examination infrastructure would also require HSM/KMS, hardened endpoints, secure print infrastructure, DLP, CCTV/device controls, network segmentation, key rotation, penetration testing and formal operational procedures.
+## Requirements
 
-## 1. Requirements
-
-- Node.js 20+
+- Node.js 20.9 or later
+- npm
 - A Supabase project
-- A GitHub repository
-- A Vercel account
+- A GitHub repository and Vercel account for hosted deployment
 
-## 2. Supabase setup
+## Supabase setup
 
-1. Create a new project at Supabase.
-2. Open **SQL Editor**.
-3. Run `supabase/schema.sql`.
-4. Open **Authentication → Providers** and keep Email enabled.
-5. Create test users from **Authentication → Users → Add user**.
-6. After creating a user, set that user's role using SQL, for example:
+1. Create a Supabase project and open its SQL Editor.
+2. Run the complete [`supabase/schema.sql`](supabase/schema.sql) file.
+3. In **Authentication → Providers**, enable Email. In **Authentication → Multi-Factor Authentication**, enable TOTP.
+4. Create users under **Authentication → Users**. The signup trigger creates a `question_setter` profile by default.
+5. Assign roles in the SQL Editor. Replace the UUID with the user's Auth ID:
 
 ```sql
 update public.profiles
-set role = 'question_setter'
+set role = 'admin'
 where id = 'USER_UUID_HERE';
 ```
 
-Valid roles are:
-`admin`, `question_setter`, `exam_officer`, `exam_centre`.
+Valid roles: `admin`, `question_setter`, `exam_officer`, `exam_centre`.
 
-7. Copy the Project URL and anon/publishable key from Supabase project settings.
-8. Copy the service-role key only for the server-side Vercel environment variable. Never expose it to the browser.
+6. Copy the project URL, anon/publishable key, and service-role key from **Project Settings → API**. The service-role key bypasses RLS and must only be configured as a private server environment variable.
 
-## 3. Generate the encryption key
+The portal guides each user through enrolling a TOTP authenticator on first sign-in. Subsequent sign-ins prompt for a current code. Paper APIs require Supabase's `aal2` assurance level. Admins should enroll MFA before assigning privileged roles.
 
-Generate a 32-byte random key and encode it as base64.
+## Local run
 
-Example with Node.js:
+```bash
+npm install
+```
+
+Copy `.env.example` to `.env.local` and fill in real values. Generate the encryption key with Node.js:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-Put the result into `PAPER_ENCRYPTION_KEY`.
-
-Do not commit the real key to GitHub.
-
-## 4. Local configuration
-
-Copy `.env.example` to `.env.local`:
+Put the output into `PAPER_ENCRYPTION_KEY`. Use a different high-entropy key in every environment. Never commit `.env.local`, the service-role key, or the encryption key.
 
 ```bash
-cp .env.example .env.local
-```
-
-Then update:
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `PAPER_ENCRYPTION_KEY`
-
-### Where exactly are the Supabase values used?
-
-`lib/supabase-browser.ts`
-- Uses `NEXT_PUBLIC_SUPABASE_URL`
-- Uses `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-
-`lib/supabase-server.ts`
-- Uses the public URL + anon key for the authenticated server client.
-
-`lib/supabase-admin.ts`
-- Uses `SUPABASE_SERVICE_ROLE_KEY`.
-- Server-only; never use this in a client component.
-
-API routes use these server utilities.
-
-## 5. Install and run
-
-```bash
-npm install
 npm run dev
 ```
 
-Open:
+Open `http://localhost:3000`.
 
-```text
-http://localhost:3000
-```
-
-## 6. Test flow
-
-### Question setter
-
-1. Login with a user whose profile role is `question_setter`.
-2. Enter title, subject and question paper text.
-3. Click **Create & Encrypt Paper**.
-4. The server generates a unique watermark ID and encrypts the paper with AES-256-GCM.
-5. Only encrypted content is stored in the `papers` table.
-
-### Exam centre
-
-1. Change a test user's role to `exam_centre`.
-2. Login with that user.
-3. Open a paper.
-4. Click **Decrypt / View**.
-5. Click **Secure Print**.
-6. A print audit record is created.
-
-### Audit
-
-Admins and exam officers can see recent audit events.
-
-## 7. Sample input
-
-```text
-Title: Data Structures Internal Examination
-Subject: Data Structures
-Paper:
-1. Explain stack and queue.
-2. Write an algorithm for binary search.
-3. Analyze the time complexity of merge sort.
-```
-
-## 8. Sample output
-
-The dashboard displays:
-
-```text
-Data Structures Internal Examination
-Status: Encrypted
-Watermark: WP-XXXXXXXX
-Created by: authorized user
-```
-
-After secure viewing:
-
-```text
-Audit event: PAPER_DECRYPTED
-Watermark: WP-XXXXXXXX
-User: authorized exam-centre user
-```
-
-After printing:
-
-```text
-Audit event: PAPER_PRINTED
-Watermark: WP-XXXXXXXX
-```
-
-## 9. Project structure
-
-```text
-question-paper-security-portal/
-├── app/
-│   ├── api/
-│   │   ├── audit/                  # Audit log API
-│   │   └── papers/
-│   │       ├── route.ts            # Create/list papers
-│   │       └── [id]/
-│   │           ├── decrypt/route.ts # Server-side decryption
-│   │           └── print/route.ts   # Secure-print audit
-│   ├── dashboard/page.tsx          # Main protected dashboard
-│   ├── login/page.tsx              # Authentication
-│   ├── globals.css                 # UI styling
-│   ├── layout.tsx                  # Root layout
-│   └── page.tsx                    # Redirect entry
-├── components/
-│   └── Dashboard.tsx               # Main UI
-├── lib/
-│   ├── crypto.ts                   # AES-256-GCM encryption/decryption
-│   ├── supabase-admin.ts           # Server-only admin client
-│   ├── supabase-browser.ts         # Browser Supabase client
-│   ├── supabase-server.ts          # Server Supabase client
-│   └── watermark.ts                # Watermark ID generation
-├── supabase/
-│   └── schema.sql                  # Tables, RLS and policies
-├── .env.example                    # Environment variable template
-├── package.json
-└── README.md
-```
-
-## 10. GitHub
-
-Create an empty GitHub repository, then:
+Available checks:
 
 ```bash
-git init
-git add .
-git commit -m "Initial secure question paper portal"
-git branch -M main
-git remote add origin YOUR_GITHUB_REPOSITORY_URL
-git push -u origin main
+npm run lint
+npm run build
+npm audit
 ```
 
-Do not commit `.env.local`.
+## Demonstration flow
 
-## 11. Vercel deployment
+1. Sign in as a `question_setter`; enroll and verify an authenticator if prompted.
+2. Create a paper. The API encrypts its content before inserting it into Supabase.
+3. Sign in as an `exam_centre` or `exam_officer` and complete MFA.
+4. Authorize a view or print. The API generates a unique copy watermark and logs the action with the user ID, paper ID, timestamp, and available request metadata.
+5. Sign in as an `admin` or `exam_officer` to review the audit feed and correlate a discovered watermark with its issuing event.
 
-1. Push the project to GitHub.
-2. Open Vercel and import the GitHub repository.
-3. Framework: Next.js.
-4. Add these Environment Variables:
+Print authorization opens a browser print view with a visible copy watermark. It records an authorization request; it does **not** attest that a registered physical printer was used or prevent saving/capturing the rendered paper.
+
+## Deploy to Vercel
+
+1. Push this repository to GitHub. Confirm `.env.local` is not staged and no real keys are present in Git history.
+2. Import the repository in Vercel as a Next.js project. Use Node.js 20.9+.
+3. Add these Environment Variables in Vercel Project Settings for each deployment environment:
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL
@@ -227,28 +96,19 @@ SUPABASE_SERVICE_ROLE_KEY
 PAPER_ENCRYPTION_KEY
 ```
 
-5. Deploy.
-6. In Supabase Authentication URL settings, add your Vercel URL to the allowed site/redirect URLs if required by your authentication configuration.
-7. Test login, paper creation, decryption and print logging.
+4. Deploy and add the production URL to Supabase **Authentication → URL Configuration → Site URL / Redirect URLs**.
+5. Create or promote a test user, enroll TOTP, then test creation, viewing, printing and audit review.
 
-## Security notes for viva
+Keep `SUPABASE_SERVICE_ROLE_KEY` and `PAPER_ENCRYPTION_KEY` private in Vercel. Do not prefix them with `NEXT_PUBLIC_`.
 
-- **Encryption:** AES-256-GCM protects question-paper content at rest in the database.
-- **RBAC:** users can perform actions according to their role.
-- **RLS:** database policies provide another authorization layer.
-- **Watermarking:** each paper has a unique identifier that can be associated with a leak.
-- **Audit logging:** security-sensitive actions are recorded.
-- **MFA:** this prototype uses Supabase authentication; MFA can be enabled in Supabase Auth for production.
-- **HSM:** represented as a production requirement rather than simulated inside a student web application.
-- **DLP/CCTV/device monitoring:** these are operational controls and cannot be reliably implemented by a normal Vercel web app alone.
+## Important production gaps
 
-## Important
+- **HSM/KMS:** encryption keys are environment secrets, not HSM-protected, wrapped, or rotated. Use a managed KMS/HSM and defined key lifecycle before handling real papers.
+- **Secure print:** this prototype logs authorization and adds a visible watermark; it does not restrict printer models, queues, number of pages, reprints, or physical access.
+- **DLP/device controls:** screenshots, cameras, USB, email, clipboard, and local copies cannot be reliably controlled by this browser app.
+- **Physical operations:** transportation seals, centre custody, CCTV, mobile-device restrictions, and incident playbooks must be implemented and audited operationally.
+- **Watermarking:** IDs are visible labels associated with each issued response, not robust invisible forensic watermarks embedded into documents.
+- **Audit guarantees:** audit inserts use a server-side service key, but this demo does not provide immutable/WORM retention, external log shipping, tamper-evident chaining, or alerting.
+- **MFA recovery:** configure and test an institution-owned recovery process; do not rely on a shared administrator account.
 
-Never put the Supabase service-role key or encryption key in:
-- React client code
-- `NEXT_PUBLIC_*` variables
-- GitHub
-- screenshots
-- README files
-- browser localStorage
-
+Never use real examination papers or production secrets in this demonstration deployment.

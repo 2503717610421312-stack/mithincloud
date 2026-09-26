@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Secure Question Paper Portal",
-  description: "MicroProject implementation for secure question-paper management",
+  title: "QP/Sec | Secure Examination Operations",
+  description: "MFA-gated, encrypted question-paper workflow with copy traceability and audit logging.",
 };
 
 export default function RootLayout({

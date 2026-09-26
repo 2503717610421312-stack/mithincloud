@@ -3,12 +3,21 @@ import { createSupabaseServer } from "../../../lib/supabase-server";
 import { createSupabaseAdmin } from "../../../lib/supabase-admin";
 import { encryptPaper } from "../../../lib/crypto";
 import { createWatermarkId } from "../../../lib/watermark";
+import { hasVerifiedMfa, mfaRequiredResponse } from "../../../lib/api-security";
 
 export async function GET() {
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasVerifiedMfa(supabase))) return mfaRequiredResponse();
+
+  const { data: profile } = await supabase
+    .from("profiles").select("role").eq("id", user.id).single();
+
+  if (!profile || !["admin", "question_setter", "exam_officer", "exam_centre"].includes(profile.role)) {
+    return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
+  }
 
   const { data, error } = await supabase
     .from("papers")
@@ -24,6 +33,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasVerifiedMfa(supabase))) return mfaRequiredResponse();
 
   const { data: profile } = await supabase
     .from("profiles").select("role").eq("id", user.id).single();
