@@ -11,9 +11,9 @@ export async function GET() {
   if (!(await hasVerifiedMfa(supabase))) return mfaRequiredResponse();
 
   const { data: profile } = await supabase
-    .from("profiles").select("role").eq("id", user.id).single();
+    .from("profiles").select("role, approved").eq("id", user.id).single();
 
-  if (!profile || !["admin","exam_officer"].includes(profile.role)) {
+  if (!profile?.approved || !["admin","exam_officer"].includes(profile.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

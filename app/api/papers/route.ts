@@ -13,9 +13,9 @@ export async function GET() {
   if (!(await hasVerifiedMfa(supabase))) return mfaRequiredResponse();
 
   const { data: profile } = await supabase
-    .from("profiles").select("role").eq("id", user.id).single();
+    .from("profiles").select("role, approved").eq("id", user.id).single();
 
-  if (!profile || !["admin", "question_setter", "exam_officer", "exam_centre"].includes(profile.role)) {
+  if (!profile?.approved || !["admin", "question_setter", "exam_officer", "exam_centre"].includes(profile.role)) {
     return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
   }
 
@@ -36,9 +36,9 @@ export async function POST(request: Request) {
   if (!(await hasVerifiedMfa(supabase))) return mfaRequiredResponse();
 
   const { data: profile } = await supabase
-    .from("profiles").select("role").eq("id", user.id).single();
+    .from("profiles").select("role, approved").eq("id", user.id).single();
 
-  if (!profile || !["admin","question_setter","exam_officer"].includes(profile.role)) {
+  if (!profile?.approved || !["admin","question_setter","exam_officer"].includes(profile.role)) {
     return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
   }
 

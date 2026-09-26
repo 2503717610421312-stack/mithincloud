@@ -17,9 +17,9 @@ export async function POST(
   if (!(await hasVerifiedMfa(supabase))) return mfaRequiredResponse();
 
   const { data: profile } = await supabase
-    .from("profiles").select("role").eq("id", user.id).single();
+    .from("profiles").select("role, approved").eq("id", user.id).single();
 
-  if (!profile || !["admin","exam_centre"].includes(profile.role)) {
+  if (!profile?.approved || !["admin","exam_centre"].includes(profile.role)) {
     return NextResponse.json({ error: "Only an authorized exam centre can print." }, { status: 403 });
   }
 

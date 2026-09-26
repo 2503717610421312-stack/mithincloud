@@ -29,21 +29,30 @@ Question setter → MFA + role check → AES-256-GCM encryption → Supabase sto
 
 1. Create a Supabase project and open its SQL Editor.
 2. Run the complete [`supabase/schema.sql`](supabase/schema.sql) file.
-3. In **Authentication → Providers**, enable Email. In **Authentication → Multi-Factor Authentication**, enable TOTP.
-4. Create users under **Authentication → Users**. The signup trigger creates a `question_setter` profile by default.
-5. Assign roles in the SQL Editor. Replace the UUID with the user's Auth ID:
+3. If this project already has the older portal schema, run [`supabase/registration-migration.sql`](supabase/registration-migration.sql) once. It approves existing profiles and makes subsequent signups require approval.
+4. In **Authentication → Providers**, enable Email signups. In **Authentication → Multi-Factor Authentication**, enable TOTP.
+5. New users register at `/register`, confirm their email if prompted, and remain unapproved. An administrator must verify the request and assign a role before paper access is enabled.
+6. To bootstrap the first administrator, create the user through Supabase Auth, then run this in SQL Editor using that user's Auth UUID:
 
 ```sql
 update public.profiles
-set role = 'admin'
+set role = 'admin', approved = true
 where id = 'USER_UUID_HERE';
 ```
 
-Valid roles: `admin`, `question_setter`, `exam_officer`, `exam_centre`.
+To approve a registrant, assign only the role they need:
 
-6. Copy the project URL, anon/publishable key, and service-role key from **Project Settings → API**. The service-role key bypasses RLS and must only be configured as a private server environment variable.
+```sql
+update public.profiles
+set role = 'exam_centre', approved = true
+where id = 'USER_UUID_HERE';
+```
 
-The portal guides each user through enrolling a TOTP authenticator on first sign-in. Subsequent sign-ins prompt for a current code. Paper APIs require Supabase's `aal2` assurance level. Admins should enroll MFA before assigning privileged roles.
+Valid roles: `admin`, `question_setter`, `exam_officer`, `exam_centre`. New registrations default to the unapproved `exam_centre` role.
+
+7. Copy the project URL, anon/publishable key, and service-role key from **Project Settings → API**. The service-role key bypasses RLS and must only be configured as a private server environment variable.
+
+After approval, the portal guides each user through enrolling a TOTP authenticator. Subsequent sign-ins prompt for a current code. Paper APIs require Supabase's `aal2` assurance level. Admins should enroll MFA before assigning privileged roles.
 
 ## Local run
 
@@ -75,11 +84,12 @@ npm audit
 
 ## Demonstration flow
 
-1. Sign in as a `question_setter`; enroll and verify an authenticator if prompted.
-2. Create a paper. The API encrypts its content before inserting it into Supabase.
-3. Sign in as an `exam_centre` or `exam_officer` and complete MFA.
-4. Authorize a view or print. The API generates a unique copy watermark and logs the action with the user ID, paper ID, timestamp, and available request metadata.
-5. Sign in as an `admin` or `exam_officer` to review the audit feed and correlate a discovered watermark with its issuing event.
+1. Register at `/register` and confirm the email if Supabase requires confirmation.
+2. Have an administrator approve the profile and assign `question_setter` or another required role.
+3. Sign in and enroll/verify an authenticator if prompted.
+4. Create a paper as a `question_setter`; the API encrypts content before storing it in Supabase.
+5. Approve an `exam_centre` or `exam_officer` account, then authorize a view or print. Each action creates a unique copy watermark and audit event.
+6. Sign in as an `admin` or `exam_officer` to review the audit feed.
 
 Print authorization opens a browser print view with a visible copy watermark. It records an authorization request; it does **not** attest that a registered physical printer was used or prevent saving/capturing the rendered paper.
 

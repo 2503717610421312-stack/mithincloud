@@ -54,6 +54,9 @@ h1, h2, h3 { color: var(--ink); }
 .text-action { margin-top: 14px; padding: 8px 0; background: transparent; color: var(--green); font-weight: 700; }
 .login-note { display: flex; align-items: center; gap: 9px; margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .login-note .status-dot { background: var(--lime); }
+.register-prompt { margin: 19px 0 0; color: var(--muted); font-size: 12px; }
+.register-prompt a { color: var(--green); font-weight: 700; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.register-message { margin: 16px 0 0; font-size: 12px; line-height: 1.6; }
 
 /* Workspace frame */
 .app-shell { display: grid; min-height: 100vh; grid-template-columns: 236px minmax(0, 1fr); }
@@ -96,6 +99,8 @@ h1, h2, h3 { color: var(--ink); }
 .mfa-panel-copy { max-width: 590px; }
 .mfa-panel h2 { margin: 0 0 8px; font: 400 24px/1.15 var(--serif); }
 .mfa-panel .muted { margin: 0; color: #74665d; font-size: 12px; line-height: 1.6; }
+.approval-panel { border-left-color: var(--green); background: #edf2ea; }
+.approval-panel .status-dot { background: var(--coral); }
 .mfa-panel button, .small-action { margin-top: 14px; padding: 10px 13px; background: var(--forest); color: white; font-size: 12px; font-weight: 700; }
 .mfa-enrollment { display: flex; align-items: center; gap: 18px; }
 .mfa-qr { width: 112px; height: 112px; padding: 7px; border: 1px solid var(--line); background: white; }

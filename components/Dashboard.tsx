@@ -36,7 +36,7 @@ type Enrollment = {
 
 type Props = {
   user: { id: string; email?: string };
-  profile: { full_name: string; role: string };
+  profile: { full_name: string; role: string; approved: boolean };
 };
 
 export default function Dashboard({ user, profile }: Props) {
@@ -48,7 +48,7 @@ export default function Dashboard({ user, profile }: Props) {
   const [content, setContent] = useState("");
   const [message, setMessage] = useState("");
   const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [mfaStage, setMfaStage] = useState<"loading" | "verified" | "enroll" | "verify">("loading");
+  const [mfaStage, setMfaStage] = useState<"loading" | "verified" | "enroll" | "verify" | "pending">(profile.approved ? "loading" : "pending");
   const [factorId, setFactorId] = useState("");
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -98,6 +98,7 @@ export default function Dashboard({ user, profile }: Props) {
   }
 
   useEffect(() => {
+    if (!profile.approved) return;
     void (async () => {
       if (await refreshMfa()) await load();
     })();
@@ -230,7 +231,7 @@ export default function Dashboard({ user, profile }: Props) {
               <p className="muted">Create, protect and account for controlled examination material.</p>
             </div>
             <div className={`assurance-pill ${mfaStage === "verified" ? "assured" : "pending"}`}>
-              <span className="status-dot" /> {mfaStage === "verified" ? "MFA VERIFIED" : mfaStage === "loading" ? "CHECKING MFA" : "MFA SETUP REQUIRED"}
+              <span className="status-dot" /> {mfaStage === "pending" ? "ACCOUNT PENDING" : mfaStage === "verified" ? "MFA VERIFIED" : mfaStage === "loading" ? "CHECKING MFA" : "MFA SETUP REQUIRED"}
             </div>
           </section>
 
@@ -244,7 +245,18 @@ export default function Dashboard({ user, profile }: Props) {
             <div className="process-step"><span>04</span><strong>Trace</strong><small>Copy watermark + log</small></div>
           </section>
 
-          {mfaStage !== "verified" && (
+          {mfaStage === "pending" && (
+            <section className="mfa-panel approval-panel">
+              <div className="mfa-panel-copy">
+                <p className="eyebrow">ACCOUNT REVIEW</p>
+                <h2>Awaiting administrator approval</h2>
+                <p className="muted">Your account is registered, but paper access is disabled until an administrator verifies your request and assigns a role.</p>
+              </div>
+              <span className="status-dot" aria-label="Approval pending" />
+            </section>
+          )}
+
+          {mfaStage !== "verified" && mfaStage !== "pending" && (
             <section className="mfa-panel">
               <div className="mfa-panel-copy">
                 <p className="eyebrow">ACCESS ASSURANCE · REQUIRED</p>
@@ -276,6 +288,7 @@ export default function Dashboard({ user, profile }: Props) {
             </section>
           )}
 
+          {profile.approved && <>
           <section className="control-band" aria-label="Active security controls">
             <div><span className="control-index">01 / CONFIDENTIALITY</span><strong>AES-256-GCM at rest</strong><small>Keys remain server-side</small></div>
             <div><span className="control-index">02 / ACCESS</span><strong>Role + MFA assurance</strong><small>Checked by protected API routes</small></div>
@@ -348,6 +361,7 @@ export default function Dashboard({ user, profile }: Props) {
           </div>
 
           <footer className="security-disclaimer"><strong>Operational boundary</strong><span>Browser print authorization is logged, but cannot restrict local screenshots, cameras, USB devices or printer queues. HSM, managed print, DLP and physical monitoring require institution-controlled infrastructure.</span></footer>
+          </>}
         </div>
       </main>
     </div>

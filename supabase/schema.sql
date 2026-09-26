@@ -13,7 +13,8 @@ create type public.user_role as enum (
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null default 'User',
-  role public.user_role not null default 'question_setter',
+  role public.user_role not null default 'exam_centre',
+  approved boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -63,10 +64,12 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name)
+  insert into public.profiles (id, full_name, role, approved)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', 'User')
+    coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), 'User'),
+    'exam_centre',
+    false
   )
   on conflict (id) do nothing;
   return new;

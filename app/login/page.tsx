@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createSupabaseBrowser } from "../../lib/supabase-browser";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,6 +69,7 @@ export default function LoginPage() {
             <input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} />
             {message && <p className="error" role="alert">{message}</p>}
             <button className="primary-action" onClick={login}>Continue <span aria-hidden="true">→</span></button>
+            <p className="register-prompt">New to the portal? <Link href="/register">Create an account</Link></p>
           </>
         ) : (
           <>
