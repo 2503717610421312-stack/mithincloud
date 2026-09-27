@@ -20,17 +20,25 @@ export default function RegisterPage() {
     setIsError(false);
 
     setIsSubmitting(true);
-    const { data, error } = await createSupabaseBrowser().auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName.trim() } },
-    });
-    setIsSubmitting(false);
-
-    if (error) {
+    let data;
+    try {
+      const result = await createSupabaseBrowser().auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: fullName.trim() } },
+      });
+      data = result.data;
+      if (result.error) {
+        setIsError(true);
+        setMessage(result.error.message);
+        return;
+      }
+    } catch {
       setIsError(true);
-      setMessage(error.message);
+      setMessage("Could not reach the registration service. Check your connection and try again.");
       return;
+    } finally {
+      setIsSubmitting(false);
     }
 
     if (data.session) {
@@ -39,8 +47,7 @@ export default function RegisterPage() {
       return;
     }
 
-    setIsError(true);
-    setMessage("No account session was created. Turn off email confirmation in Supabase Auth settings, then try again.");
+    setMessage("Account created. Check your email for a confirmation link, then sign in.");
   }
 
   return (

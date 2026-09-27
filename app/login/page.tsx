@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { createSupabaseBrowser } from "../../lib/supabase-browser";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -13,25 +13,62 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
   const [stage, setStage] = useState<"credentials" | "mfa">("credentials");
   const [message, setMessage] = useState("");
+  const [canResendConfirmation, setCanResendConfirmation] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
-  async function login() {
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setMessage("");
-    const supabase = createSupabaseBrowser();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return setMessage(error.message);
+    setCanResendConfirmation(false);
+    setIsSubmitting(true);
+    try {
+      const supabase = createSupabaseBrowser();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setMessage(error.message);
+        setCanResendConfirmation(error.code === "email_not_confirmed" || /email not confirmed/i.test(error.message));
+        return;
+      }
 
-    const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (assurance?.nextLevel === "aal2" && assurance.currentLevel !== "aal2") {
-      const { data: factors, error: factorError } = await supabase.auth.mfa.listFactors();
-      const factor = factors?.totp.find(item => item.status === "verified");
-      if (factorError || !factor) return setMessage("No verified authenticator is available for this account.");
-      setFactorId(factor.id);
-      setStage("mfa");
-      return;
+      const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (assurance?.nextLevel === "aal2" && assurance.currentLevel !== "aal2") {
+        const { data: factors, error: factorError } = await supabase.auth.mfa.listFactors();
+        const factor = factors?.totp.find(item => item.status === "verified");
+        if (factorError || !factor) {
+          setMessage("No verified authenticator is available for this account.");
+          return;
+        }
+        setFactorId(factor.id);
+        setStage("mfa");
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setMessage("Could not reach the sign-in service. Check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
     }
+  }
 
-    router.push("/dashboard");
-    router.refresh();
+  async function resendConfirmation() {
+    setMessage("");
+    setIsResending(true);
+    try {
+      const { error } = await createSupabaseBrowser().auth.resend({ type: "signup", email });
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+      setCanResendConfirmation(false);
+      setMessage("Confirmation email sent. Check your inbox, then sign in.");
+    } catch {
+      setMessage("Could not resend the confirmation email. Check your connection and try again.");
+    } finally {
+      setIsResending(false);
+    }
   }
 
   async function verifyMfa() {
@@ -62,15 +99,16 @@ export default function LoginPage() {
         <p className="muted">{stage === "mfa" ? "Enter the current code from your authenticator app." : "Use your institution-issued account."}</p>
 
         {stage === "credentials" ? (
-          <>
+          <form onSubmit={login}>
             <label htmlFor="email">Email address</label>
-            <input id="email" type="email" autoComplete="username" value={email} onChange={event => setEmail(event.target.value)} />
+            <input id="email" type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} />
             <label htmlFor="password">Password</label>
-            <input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} />
+            <input id="password" type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} />
             {message && <p className="error" role="alert">{message}</p>}
-            <button className="primary-action" onClick={login}>Continue <span aria-hidden="true">→</span></button>
+            {canResendConfirmation && <button className="text-action" type="button" disabled={isResending} onClick={resendConfirmation}>{isResending ? "Sending..." : "Resend confirmation email"}</button>}
+            <button className="primary-action" type="submit" disabled={isSubmitting}>{isSubmitting ? "Signing in..." : "Continue"} <span aria-hidden="true">→</span></button>
             <p className="register-prompt">New to the portal? <Link href="/register">Create an account</Link></p>
-          </>
+          </form>
         ) : (
           <>
             <label htmlFor="mfa-code">6-digit authenticator code</label>
