@@ -18,6 +18,16 @@ Question setter → MFA + role check → AES-256-GCM encryption → Supabase sto
 | Audit | Creation, view, and print authorization events are recorded with time and available request metadata |
 | Incident response | Admins/exam officers can review events; revoke a user's Supabase account/session and investigate the matching copy ID |
 
+## Project methodology
+
+This project uses a defense-in-depth methodology to demonstrate the controlled handling of examination papers. Access is based on an authenticated Supabase identity, an administrator-approved profile, a least-privilege role, and a verified TOTP authenticator. These controls are evaluated together rather than treating a successful login as sufficient authorization.
+
+Registration creates an authentication identity and a corresponding profile. New profiles are unapproved by default. An administrator assigns an appropriate role and approves the profile before the user can proceed to MFA enrollment or paper operations. Each protected API request independently checks the session, MFA assurance level, approval state, and role required for that operation.
+
+When an authorized setter submits a paper, the server validates the title, subject, and content, encrypts the content with AES-256-GCM, and stores the ciphertext, initialization vector, and authentication tag in Supabase Postgres. The encryption key is held in a private server environment variable and is not sent to the browser. For an authorized view or print request, the server checks access again, decrypts the paper for that operation, generates a unique copy watermark, and records an audit event associated with the user and paper.
+
+The resulting audit trail supports review of who created, viewed, or requested authorization to print a paper, and helps connect an issued copy to its recorded watermark. The methodology is assessed through negative authorization tests, inspection that stored content is ciphertext, confirmation that copy identifiers are unique, and verification that authorized actions create corresponding audit records. This is an academic prototype: it does not prevent screenshots, photography, endpoint compromise, or uncontrolled physical printing.
+
 ## Requirements
 
 - Node.js 20.9 or later
@@ -56,23 +66,40 @@ After approval, the portal guides each user through enrolling a TOTP authenticat
 
 ## Local run
 
-```bash
+1. Install Node.js 20.9 or later, npm, and JDK 11 or later (the JDK is only needed for the Java smoke tester).
+2. Complete the Supabase setup above, copy the placeholder template with `Copy-Item .env.example .env.local`, and replace its four values with your Supabase URL, anon key, service-role key, and generated encryption key. Keep `.env.local`, the service-role key, and encryption key private.
+3. From the project folder, install dependencies and check the TypeScript project:
+
+```powershell
 npm install
+npm run lint
+npm run build
 ```
 
-Copy `.env.example` to `.env.local` and fill in real values. Generate the encryption key with Node.js:
+If you need to create a new encryption key, run:
 
-```bash
+```powershell
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 Put the output into `PAPER_ENCRYPTION_KEY`. Use a different high-entropy key in every environment. Never commit `.env.local`, the service-role key, or the encryption key.
 
-```bash
+4. Start the web app in PowerShell:
+
+```powershell
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+5. Open `http://localhost:3000`. In a second PowerShell terminal, compile and run the Java HTTP smoke tester:
+
+```powershell
+$testOut = Join-Path $env:TEMP 'mithincloud-java-tests'
+New-Item -ItemType Directory -Force $testOut | Out-Null
+javac -d $testOut tests\ProjectSmokeTest.java
+java -cp $testOut ProjectSmokeTest http://localhost:3000
+```
+
+The tester checks page availability and redirects, anonymous API access denial, and malformed/invalid registration requests. It does not create a user or change Supabase data. A non-zero exit code means one or more checks failed.
 
 Available checks:
 
@@ -82,14 +109,33 @@ npm run build
 npm audit
 ```
 
-## Demonstration flow
+## Methodology integration checks
 
-1. Register at `/register`. The account is confirmed by the server and signed in immediately; no email link is sent.
-2. Have an administrator approve the profile and assign `question_setter` or another required role.
-3. Sign in and enroll/verify an authenticator if prompted.
-4. Create a paper as a `question_setter`; the API encrypts content before storing it in Supabase.
-5. Approve an `exam_centre` or `exam_officer` account, then authorize a view or print. Each action creates a unique copy watermark and audit event.
-6. Sign in as an `admin` or `exam_officer` to review the audit feed.
+The Java smoke tester intentionally does not claim to verify authenticated MFA and role workflows. Complete these checks manually with separate test accounts after the smoke tests pass:
+
+1. Approve a `question_setter` test account, enroll and verify TOTP, then create a paper. Confirm the paper row stores ciphertext and IV/authentication tag rather than readable question content.
+2. Try paper creation with an approved `exam_centre` account; the API should deny it. Confirm an unapproved account cannot list or create papers.
+3. Approve an `exam_centre` account, verify TOTP, then authorize a paper view and print. Each action should return a copy watermark and create a corresponding audit event.
+4. Confirm an `exam_centre` cannot read the audit feed, while an approved `admin` or `exam_officer` with verified TOTP can.
+5. Confirm browser-side reads of `papers` and `audit_logs` remain blocked by RLS. Never use real examination papers or production credentials for these checks.
+
+## How to work with the system
+
+The application has one security console at `/dashboard`; it does not have a separate administrator page. Paper and audit actions require an approved account and verified MFA. The role permissions implemented by the API are:
+
+| Operation | Roles |
+| --- | --- |
+| Create a paper | `admin`, `question_setter`, `exam_officer` |
+| View a paper | `admin`, `exam_officer`, `exam_centre` |
+| Authorize printing | `admin`, `exam_centre` |
+| Review audit events | `admin`, `exam_officer` |
+
+1. Register at `/register`. The server confirms the new account and signs it in without sending an email link. The profile is created as unapproved, so paper access remains unavailable.
+2. An administrator approves the profile and assigns only the role needed. This prototype does not include a user-management screen; use the Supabase SQL Editor and the approval query in the setup section.
+3. Sign in again after approval. Enroll an authenticator using the QR code or manual setup key, then enter the current six-digit TOTP code. Paper operations remain locked until verification succeeds.
+4. To create a paper, use **Create a paper** in the security console. Enter a title, subject, and question-paper content, then select **Encrypt & seal**. The server stores encrypted content and returns a reference watermark.
+5. Sign in as an approved `exam_centre` to authorize a view or print. Each successful action creates a new copy watermark and audit record. `exam_officer` users can view papers but cannot authorize printing.
+6. Sign in as an approved `admin` or `exam_officer` and review **Recent activity** to inspect recorded events and copy identifiers.
 
 Print authorization opens a browser print view with a visible copy watermark. It records an authorization request; it does **not** attest that a registered physical printer was used or prevent saving/capturing the rendered paper.
 
