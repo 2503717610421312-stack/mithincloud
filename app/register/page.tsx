@@ -20,19 +20,28 @@ export default function RegisterPage() {
     setIsError(false);
 
     setIsSubmitting(true);
-    let data;
     try {
-      const result = await createSupabaseBrowser().auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName.trim() } },
+      const response = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName, email, password }),
       });
-      data = result.data;
-      if (result.error) {
+      const result: { error?: string } = await response.json();
+      if (!response.ok) {
         setIsError(true);
-        setMessage(result.error.message);
+        setMessage(result.error || "Could not create the account.");
         return;
       }
+
+      const { error } = await createSupabaseBrowser().auth.signInWithPassword({ email, password });
+      if (error) {
+        setIsError(true);
+        setMessage(`Account created, but sign-in failed: ${error.message}`);
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
     } catch {
       setIsError(true);
       setMessage("Could not reach the registration service. Check your connection and try again.");
@@ -40,14 +49,6 @@ export default function RegisterPage() {
     } finally {
       setIsSubmitting(false);
     }
-
-    if (data.session) {
-      router.push("/dashboard");
-      router.refresh();
-      return;
-    }
-
-    setMessage("Account created. Check your email for a confirmation link, then sign in.");
   }
 
   return (

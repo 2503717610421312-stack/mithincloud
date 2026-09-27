@@ -30,8 +30,8 @@ Question setter → MFA + role check → AES-256-GCM encryption → Supabase sto
 1. Create a Supabase project and open its SQL Editor.
 2. Run the complete [`supabase/schema.sql`](supabase/schema.sql) file.
 3. If this project already has the older portal schema, run [`supabase/registration-migration.sql`](supabase/registration-migration.sql) once. It approves existing profiles and makes subsequent signups require approval.
-4. In **Authentication → Providers → Email**, enable signups. With **Confirm email** on, users must confirm the link sent to their inbox before signing in; turn it off only if you want immediate local-demo sign-in. Set the password minimum/requirements to the policy you want. In **Authentication → Multi-Factor Authentication**, enable TOTP.
-5. New users register at `/register` with a name, email and password. They remain unapproved until an administrator assigns a role.
+4. In **Authentication → Providers → Email**, enable signups and set the password requirements you want. In **Authentication → Multi-Factor Authentication**, enable TOTP. This demo confirms new accounts server-side so registration does not send a confirmation email.
+5. New users register at `/register` with a name, email and password, then sign in immediately. They remain unapproved until an administrator assigns a role.
 6. To bootstrap the first administrator, create the user through Supabase Auth, then run this in SQL Editor using that user's Auth UUID:
 
 ```sql
@@ -84,7 +84,7 @@ npm audit
 
 ## Demonstration flow
 
-1. Register at `/register`. If Supabase email confirmation is enabled, confirm the email before signing in; otherwise signup creates a session immediately.
+1. Register at `/register`. The account is confirmed by the server and signed in immediately; no email link is sent.
 2. Have an administrator approve the profile and assign `question_setter` or another required role.
 3. Sign in and enroll/verify an authenticator if prompted.
 4. Create a paper as a `question_setter`; the API encrypts content before storing it in Supabase.
@@ -120,5 +120,6 @@ Keep `SUPABASE_SERVICE_ROLE_KEY` and `PAPER_ENCRYPTION_KEY` private in Vercel. D
 - **Watermarking:** IDs are visible labels associated with each issued response, not robust invisible forensic watermarks embedded into documents.
 - **Audit guarantees:** audit inserts use a server-side service key, but this demo does not provide immutable/WORM retention, external log shipping, tamper-evident chaining, or alerting.
 - **MFA recovery:** configure and test an institution-owned recovery process; do not rely on a shared administrator account.
+- **Email ownership:** public registration marks submitted email addresses as confirmed without proving ownership. This is for demonstrations only; use verified email or an invitation-based registration flow before production.
 
 Never use real examination papers or production secrets in this demonstration deployment.
