@@ -1,3 +1,7 @@
+deployed link : mithincloud.vercel.app
+
+
+
 # QP/Sec: Secure Question Paper Portal
 
 An academic demonstration of a controlled examination-paper lifecycle: authenticated authoring, server-side encryption, MFA-gated role access, per-copy trace identifiers, controlled print authorization, and audit review.
